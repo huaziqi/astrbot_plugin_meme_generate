@@ -1,14 +1,20 @@
-# astrbot-plugin-helloworld
+# astrbot_plugin_meme_generate
 
-AstrBot 插件模板 / A template plugin for AstrBot plugin feature
+一个 AstrBot 插件：
+- 保存群聊图片到本地表情包库
+- 手动导入图片 URL
+- 基于聊天文本氛围（关键词）匹配并发送表情包
 
-> [!NOTE]
-> This repo is just a template of [AstrBot](https://github.com/AstrBotDevs/AstrBot) Plugin.
-> 
-> [AstrBot](https://github.com/AstrBotDevs/AstrBot) is an agentic assistant for both personal and group conversations. It can be deployed across dozens of mainstream instant messaging platforms, including QQ, Telegram, Feishu, DingTalk, Slack, LINE, Discord, Matrix, etc. In addition, it provides a reliable and extensible conversational AI infrastructure for individuals, developers, and teams. Whether you need a personal AI companion, an intelligent customer support agent, an automation assistant, or an enterprise knowledge base, AstrBot enables you to quickly build AI applications directly within your existing messaging workflows.
+## 指令
 
-# Supports
+- `/meme_help` 查看帮助
+- `/meme_save [mood]` 保存当前消息中的图片（可选指定 mood）
+- `/meme_import [mood] [url]` 手动导入图片
+- `/meme_list` 查看库存摘要
+- `/meme_send [文本]` 根据文本情绪选图并发送
 
-- [AstrBot Repo](https://github.com/AstrBotDevs/AstrBot)
-- [AstrBot Plugin Development Docs (Chinese)](https://docs.astrbot.app/dev/star/plugin-new.html)
-- [AstrBot Plugin Development Docs (English)](https://docs.astrbot.app/en/dev/star/plugin-new.html)
+## 说明
+
+- 图片和索引保存在 `data/meme_generate/` 下。
+- 当前版本使用关键词匹配情绪（happy/angry/sad/surprised/awkward）。
+- 发送图片接口会尝试兼容不同 AstrBot 适配器（`image_result` / `file_result`）。
