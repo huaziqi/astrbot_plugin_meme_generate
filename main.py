@@ -151,6 +151,10 @@ class MyPlugin(Star):
         if meme_id is not None:
             self.db.inc_send_count(meme_id)
 
+        # 阻止 AstrBot 默认 LLM 对同一条消息再发一条文字回复
+        # pipeline 条件：`and not event.call_llm`，设为 True 即可跳过 LLM
+        event.call_llm = True
+
         logger.info(f"[Meme] 向群 {group_id} 发送表情包: {meme_path}")
         # 用 base64 编码发送，避免 Windows 反斜杠路径在 QQ 适配器中被当成文本
         yield event.chain_result([_image_from_path(meme_path)])

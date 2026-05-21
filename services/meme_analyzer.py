@@ -29,17 +29,17 @@ class MemeAnalyzer:
         return list(self._history[group_id])
 
     # ------------------------------------------------------------------
-    # LLM 调用工具
+    # LLM 调用工具（后台专用，不绑定群组会话）
     # ------------------------------------------------------------------
     async def _llm(
         self,
         prompt: str,
         *,
         image_b64: str | None = None,
-        umo: str | None = None,
     ) -> str:
-        """调用当前激活的 LLM，返回回复文本（失败时返回空串）。"""
-        provider = self._ctx.get_using_provider(umo)
+        """调用全局 LLM，不传 umo，避免将后台请求写入群组对话历史。"""
+        # 始终使用全局默认 provider（umo=None），防止污染群聊会话记录
+        provider = self._ctx.get_using_provider(None)
         if provider is None:
             providers = self._ctx.get_all_providers()
             if not providers:
@@ -54,7 +54,7 @@ class MemeAnalyzer:
             resp = await provider.text_chat(
                 prompt=prompt,
                 image_urls=image_urls,
-                contexts=[],
+                contexts=[],   # 空上下文，不携带任何会话历史
             )
             return resp.completion_text or ""
         except Exception as e:
@@ -65,7 +65,9 @@ class MemeAnalyzer:
     # 图片打标签
     # ------------------------------------------------------------------
     async def tag_image(self, image_path: str, umo: str | None = None) -> list[str]:
-        """用视觉模型分析表情包，返回中文标签列表（最多 6 个）。"""
+        """用视觉模型分析表情包，返回中文标签列表（最多 6 个）。
+        umo 参数保留但不再传给 _llm，只供日志追踪用。
+        """
         try:
             with open(image_path, "rb") as f:
                 b64 = base64.b64encode(f.read()).decode()
@@ -80,7 +82,7 @@ class MemeAnalyzer:
             "只返回 JSON 数组，例如：[\"搞笑\", \"无语\", \"狗头\"]，不要其他内容。"
         )
 
-        raw = await self._llm(prompt, image_b64=b64, umo=umo)
+        raw = await self._llm(prompt, image_b64=b64)
         return _parse_json_list(raw)
 
     # ------------------------------------------------------------------
@@ -90,6 +92,7 @@ class MemeAnalyzer:
         self, group_id: str, umo: str | None = None
     ) -> tuple[bool, list[str]]:
         """根据近期聊天记录判断是否适合插入表情包。
+        umo 参数保留但不再传给 _llm，只供日志追踪用。
 
         Returns:
             (should_send, mood_tags)
@@ -109,7 +112,7 @@ class MemeAnalyzer:
             "只返回 JSON，不要任何其他内容。"
         )
 
-        raw = await self._llm(prompt, umo=umo)
+        raw = await self._llm(prompt)
         data = _parse_json_obj(raw)
         if data:
             return bool(data.get("send", False)), list(data.get("tags", []))
@@ -122,6 +125,7 @@ class MemeAnalyzer:
         self, group_id: str, umo: str | None = None
     ) -> dict | None:
         """根据群聊语境生成表情包文案。
+        umo 参数保留但不再传给 _llm，只供日志追踪用。
 
         Returns:
             {"top": str, "bottom": str, "style": str} 或 None
@@ -141,7 +145,7 @@ class MemeAnalyzer:
             "不要其他内容。"
         )
 
-        raw = await self._llm(prompt, umo=umo)
+        raw = await self._llm(prompt)
         return _parse_json_obj(raw)
 
 
