@@ -8,6 +8,7 @@
 4. 完全无指令，全自动运行。
 """
 
+import base64
 import hashlib
 import os
 import random
@@ -38,6 +39,17 @@ _DB_PATH = os.path.join(_DATA_DIR, "memes.db")
 
 for _d in (_DATA_DIR, _MEMES_DIR, _AI_MEMES_DIR):
     os.makedirs(_d, exist_ok=True)
+
+
+def _image_from_path(path: str) -> Comp.Image:
+    """将本地图片文件读取为 base64 Image 组件，绕过 Windows 路径兼容问题。"""
+    try:
+        with open(path, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode()
+        return Comp.Image.fromBase64(b64)
+    except Exception:
+        # 兜底：仍尝试 fromFileSystem（用正斜杠）
+        return Comp.Image.fromFileSystem(path.replace("\\", "/"))
 
 
 @register("astrbot_plugin_meme_generate", "huaziqi", "TTS 语音合成 & 表情包插件", "1.1.0")
@@ -96,6 +108,12 @@ class MyPlugin(Star):
     async def handle_group(self, event: AstrMessageEvent):
         """监听所有群消息，静默收集表情包并按语境发送。"""
 
+        # ── 0. 跳过机器人自身发送的消息，避免回声循环 ────────────────
+        self_id = event.get_self_id()
+        sender_id = event.get_sender_id()
+        if self_id and sender_id and str(self_id) == str(sender_id):
+            return
+
         group_id = event.get_group_id() or event.session_id
         umo = event.unified_msg_origin
         messages = event.get_messages()
@@ -134,7 +152,8 @@ class MyPlugin(Star):
             self.db.inc_send_count(meme_id)
 
         logger.info(f"[Meme] 向群 {group_id} 发送表情包: {meme_path}")
-        yield event.chain_result([Comp.Image.fromFileSystem(meme_path)])
+        # 用 base64 编码发送，避免 Windows 反斜杠路径在 QQ 适配器中被当成文本
+        yield event.chain_result([_image_from_path(meme_path)])
 
     # ──────────────────────────────────────────────────────────────────
     # 内部工具方法
