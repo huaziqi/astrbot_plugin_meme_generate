@@ -120,6 +120,149 @@ class MemeImageGenerator:
             return None
 
     # ------------------------------------------------------------------
+    # 功能二：给现有图片叠加文字（白字黑边，Impact 风格）
+    # ------------------------------------------------------------------
+    def add_text_to_meme(
+        self,
+        base_image_path: str,
+        top_text: str,
+        bottom_text: str,
+    ) -> str | None:
+        """打开已有表情包，在顶部/底部叠加白字黑边文字，返回新图片路径。"""
+        if not PIL_AVAILABLE:
+            logger.warning("[Meme] Pillow 未安装，无法叠加文字")
+            return None
+        try:
+            img = Image.open(base_image_path).convert("RGB")
+            w, h = img.size
+
+            # 缩放：太大压小，太小放大，保证文字清晰
+            max_side = 800
+            if max(w, h) > max_side:
+                scale = max_side / max(w, h)
+                img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+            elif max(w, h) < 300:
+                scale = 300 / max(w, h)
+                img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+            w, h = img.size
+
+            draw = ImageDraw.Draw(img)
+            font_size = max(22, w // 13)
+            font = self._load_font(font_size)
+
+            if top_text:
+                self._draw_outlined_text(draw, top_text, font, w, h, "top")
+            if bottom_text:
+                self._draw_outlined_text(draw, bottom_text, font, w, h, "bottom")
+
+            out_path = os.path.join(self.output_dir, f"overlay_{uuid.uuid4().hex[:10]}.png")
+            img.save(out_path, "PNG")
+            logger.info(f"[Meme] 文字叠加完成: {out_path}")
+            return out_path
+        except Exception as e:
+            logger.error(f"[Meme] 文字叠加失败: {e}")
+            return None
+
+    def _draw_outlined_text(
+        self,
+        draw: "ImageDraw.ImageDraw",
+        text: str,
+        font,
+        img_w: int,
+        img_h: int,
+        position: str = "top",
+        stroke: int = 2,
+    ) -> None:
+        """在图片顶部或底部绘制带黑色描边的白色文字。"""
+        char_w = max(1, getattr(font, "size", 24))
+        chars_per_line = max(8, img_w // char_w)
+
+        lines: list[str] = []
+        tmp = text
+        while len(tmp) > chars_per_line:
+            lines.append(tmp[:chars_per_line])
+            tmp = tmp[chars_per_line:]
+        if tmp:
+            lines.append(tmp)
+
+        font_size = getattr(font, "size", 24)
+        line_h = font_size + 4
+        total_h = len(lines) * line_h
+        margin = 6
+        start_y = margin if position == "top" else img_h - total_h - margin
+
+        for i, line in enumerate(lines):
+            try:
+                bbox = draw.textbbox((0, 0), line, font=font)
+                text_w = bbox[2] - bbox[0]
+            except AttributeError:
+                text_w = len(line) * font_size
+
+            x = max(0, (img_w - text_w) // 2)
+            y = start_y + i * line_h
+
+            # 8 方向描边
+            for dx in range(-stroke, stroke + 1):
+                for dy in range(-stroke, stroke + 1):
+                    if dx == 0 and dy == 0:
+                        continue
+                    draw.text((x + dx, y + dy), line, fill=(0, 0, 0), font=font)
+            # 白色主文字
+            draw.text((x, y), line, fill=(255, 255, 255), font=font)
+
+    # ------------------------------------------------------------------
+    # 功能三：两张表情包左右拼合
+    # ------------------------------------------------------------------
+    def combine_memes(
+        self,
+        image1_path: str,
+        image2_path: str,
+    ) -> str | None:
+        """将两张表情包左右拼合成一张，返回新图片路径。"""
+        if not PIL_AVAILABLE:
+            logger.warning("[Meme] Pillow 未安装，无法拼合图片")
+            return None
+        try:
+            img1 = Image.open(image1_path).convert("RGB")
+            img2 = Image.open(image2_path).convert("RGB")
+
+            # 统一高度（取较小值，上限 400，下限 150）
+            target_h = max(150, min(img1.height, img2.height, 400))
+
+            def fit_height(img: "Image.Image", h: int) -> "Image.Image":
+                ratio = h / img.height
+                return img.resize((max(1, int(img.width * ratio)), h), Image.LANCZOS)
+
+            def cap_width(img: "Image.Image", max_w: int = 400) -> "Image.Image":
+                if img.width <= max_w:
+                    return img
+                ratio = max_w / img.width
+                return img.resize((max_w, max(1, int(img.height * ratio))), Image.LANCZOS)
+
+            img1 = cap_width(fit_height(img1, target_h))
+            img2 = cap_width(fit_height(img2, target_h))
+
+            # 宽度压缩后高度可能略有差异，再对齐一次
+            final_h = min(img1.height, img2.height)
+            if img1.height != final_h:
+                img1 = fit_height(img1, final_h)
+            if img2.height != final_h:
+                img2 = fit_height(img2, final_h)
+
+            gap = 6
+            canvas = Image.new("RGB", (img1.width + gap + img2.width, final_h), (30, 30, 30))
+            canvas.paste(img1, (0, 0))
+            canvas.paste(img2, (img1.width + gap, 0))
+
+            out_path = os.path.join(self.output_dir, f"combo_{uuid.uuid4().hex[:10]}.png")
+            canvas.save(out_path, "PNG")
+            logger.info(f"[Meme] 拼合完成: {out_path}")
+            return out_path
+        except Exception as e:
+            logger.error(f"[Meme] 拼合失败: {e}")
+            return None
+
+    # ------------------------------------------------------------------
     # 内部工具
     # ------------------------------------------------------------------
     def _load_font(self, size: int):
